@@ -22,10 +22,10 @@ The purpose of **ZooKeeperClient** is to abstract out common tasks in using ZooK
 
 - Watcher Management
 
-    **ZooKeeperClient** allows an application to set/unset watcher very easy.
+    **ZooKeeperClient** allows an application to set/unset watchers very easy.
     ZooKeeper's watcher is a trigger mechanism for various events happening in ZooKeeper.
     An event may be generated when the state of session changes, or data in ZooKeeper changes.
-    It is a one-time trigger. It means that the watcher is gone once a trigger is fired. 
+    It is a one-time trigger. This means that the watcher is gone once a trigger is fired. 
     In order to keep watching the same node, an application must set a watcher again. 
     ZooKeeperClient does that automatically. 
     An application can specify a watcher as a simple lambda expression which is invoked whenever the watched znode is changed. 
@@ -92,7 +92,7 @@ WatchHandle handle = zkClient.watch(
 );
 ```
 
-When a data change handler is invoked, ZooKeeperClient automatically set a new watcher to the znode for next data change event. 
+When a data change handler is invoked, ZooKeeperClient automatically sets a new watcher to the znode for next data change event. 
 So, once the data change handler is set it is invoked automatically whenever the node is changes.
 To stop this, you must close the `WatchHandle` returned from `watch()` method.
 
@@ -101,11 +101,11 @@ handle.close();
 ```
 
 There are more features not described here, such as node manipulation methods, session event handlers, ACL, 
-explicit use of ZooKeeper session. 
+and explicit use of ZooKeeper session. 
 
 ## ClusterManager
-**ClusterManager** keeps track of servers participating in a cluster and assign partitions to them. 
-Also, it notifies clients the server locations and the current partition assignment. It does not include a RPC layer.
+**ClusterManager** keeps track of servers participating in a cluster and assigns partitions to them. 
+Also, it notifies clients of the server locations and the current partition assignment. It does not include a RPC layer.
 
 `ManagedServer` interface is an abstraction of a server node through which `ClusterManager` interacts with your server code. 
 A server node joins the cluster by registering the instance of `ManagedServer` to `ClusterManager`.
@@ -113,7 +113,7 @@ Similary, `ManagedClient` interface is an abstract of a client through which `Cl
 
 ### Usage
 First, you need to create a znode that represents a cluster using the `CreateCluster` tool.
-This is one time set up per the cluster. 
+This is a one time set up per the cluster. 
 
 ```
 java com.wepay.zktools.clustermgr.tools.CreateCluster -z <zookeeperConnectString> -p <numberOfPartitions> -r <clusterRootPath>"
@@ -136,8 +136,8 @@ ManagedServer managedServer = new MyManagedServer(...);
 clusterManager.manage(managedServer);
 ```
 
-Once a server joined the cluster, the partition assignment is recomputed using the partition assignment policy.
-And all servers in the cluster will be notified of the new assignment.
+Once a server joins the cluster, the partition assignment is recomputed using the partition assignment policy,
+and all servers in the cluster will be notified of the new assignment.
 
 Similarly, a client joins the cluster by registering its implementation of `ManagedClient`.
 
