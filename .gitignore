@@ -3,6 +3,7 @@
 Vagrantfile
 .classpath
 .idea/
+venv
 *.ipr
 *.iws
 *.iml
