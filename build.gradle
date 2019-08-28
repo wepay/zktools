@@ -132,16 +132,6 @@ jar {
     }
 }
 
-artifactory {
-    contextUrl = 'https://artifactory.devops.wepay-inc.com/artifactory/'
-    publish {
-        repoKey = 'libs-release'
-    }
-    resolve {
-        repoKey = 'libs-release'
-    }
-}
-
 publishing {
     publications {
         mavenJava(MavenPublication) {
