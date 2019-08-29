@@ -1,17 +1,9 @@
 apply plugin: 'checkstyle'
-apply plugin: 'com.jfrog.artifactory'
 apply plugin: 'findbugs'
 apply plugin: 'idea'
 apply plugin: 'java'
 apply plugin: 'maven-publish'
-
-group = "com.wepay.zktools"
-
-def major_version = 0
-def minor_version = 3
-def micro_version = (hasProperty("teamcity") && teamcity["build.number"] != null) ? teamcity["build.number"] : "X";
-
-version = "$major_version.$minor_version.$micro_version";
+apply plugin: 'signing'
 
 project.ext {
     apacheZooKeeperVersion = '3.4.10'
@@ -74,38 +66,6 @@ findbugs {
     toolVersion = "3.0.1"
 }
 
-checkstyleMain {
-    reports {
-        xml {
-            destination "$rootDir/build/reports/checkstyle/main.xml"
-        }
-    }
-    configFile = new File(rootDir, 'config/checkstyle/checkstyle.xml')
-
-    doLast {
-        ant.xslt(in: "$rootDir/build/reports/checkstyle/main.xml",
-                style: "config/checkstyle/checkstyle-noframes.xsl",
-                out: "$rootDir/build/reports/checkstyle/main.html"
-        )
-    }
-}
-
-checkstyleTest {
-    reports {
-        xml {
-            destination "build/reports/checkstyle/test.xml"
-        }
-    }
-    configFile = new File("config/checkstyle/checkstyle_test.xml")
-
-    doLast {
-        ant.xslt(in: "$buildDir/reports/checkstyle/test.xml",
-            style: "config/checkstyle/checkstyle-noframes.xsl",
-            out: "$buildDir/reports/checkstyle/test.html"
-        )
-    }
-}
-
 // findbugs html only report
 findbugsMain {
     reports {
@@ -132,17 +92,62 @@ jar {
     }
 }
 
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allJava
+    archiveClassifier = 'sources'
+}
+
+task javadocJar(type: Jar) {
+    from javadoc
+    archiveClassifier = 'javadoc'
+}
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId 'zktools'
+            artifactId = project.name
+
             from components.java
+            artifact sourcesJar
+            artifact javadocJar
+
+            pom {
+                name = 'ZkTools'
+                description = 'ZooKeeper tools and utilities'
+                url = 'https://www.github.com/wepay/zktools'
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'ymatsuda'
+                        name = 'Yasuhiro Matsuda'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/wepay/zktools.git'
+                    developerConnection = 'scm:git:ssh://github.com/wepay/zktools.git'
+                    url = 'https://github.com/wepay/zktools'
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            def releasesRepoUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
+            def snapshotsRepoUrl = 'https://oss.sonatype.org/content/repositories/snapshots'
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+            credentials {
+                username findProperty('ossrhUsername')?: ''
+                password findProperty('ossrhPassword')?: ''
+            }
         }
     }
 }
 
-artifactoryPublish {
-    publications(publishing.publications.mavenJava)
+signing {
+    sign publishing.publications.mavenJava
 }
-
-
