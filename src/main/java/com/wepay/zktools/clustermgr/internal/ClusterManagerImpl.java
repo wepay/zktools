@@ -286,7 +286,10 @@ public class ClusterManagerImpl implements ClusterManager {
                             ServerDescriptor descriptor =
                                 new ServerDescriptor(managedServerInfo.serverId, server.endpoint(), server.getPreferredPartitions());
 
-                            createServerZNode(s, descriptor);
+                            ZNode znode = createServerZNode(s, descriptor);
+
+                            // Update ManagedServerInfo with the new znode.
+                            managedServers.put(server, new ManagedServerInfo(descriptor.serverId, znode));
                         }
                     }
                 } catch (Exception ex) {
