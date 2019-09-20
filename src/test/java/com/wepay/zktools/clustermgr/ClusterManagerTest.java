@@ -6,22 +6,24 @@ import com.wepay.zktools.clustermgr.internal.ClusterParamsSerializer;
 import com.wepay.zktools.clustermgr.internal.DynamicPartitionAssignmentPolicy;
 import com.wepay.zktools.clustermgr.internal.PartitionAssignment;
 import com.wepay.zktools.clustermgr.internal.ServerDescriptor;
-import com.wepay.zktools.util.StateChangeFuture;
-import com.wepay.zktools.zookeeper.ZNode;
-import com.wepay.zktools.zookeeper.ZooKeeperClient;
-import com.wepay.zktools.zookeeper.internal.ZooKeeperClientImpl;
 import com.wepay.zktools.test.MockManagedClient;
 import com.wepay.zktools.test.MockManagedServer;
 import com.wepay.zktools.test.ZKTestUtils;
 import com.wepay.zktools.test.util.ZooKeeperServerRunner;
+import com.wepay.zktools.util.StateChangeFuture;
+import com.wepay.zktools.zookeeper.ZNode;
+import com.wepay.zktools.zookeeper.ZooKeeperClient;
+import com.wepay.zktools.zookeeper.internal.ZooKeeperClientImpl;
+import com.wepay.zktools.zookeeper.serializer.IntegerSerializer;
 import org.apache.zookeeper.CreateMode;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Comparator;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -362,6 +364,101 @@ public class ClusterManagerTest extends ZKTestUtils {
             assertEquals(numPartitions, client2.partitions.size());
             assertEquals(expectedPartitions, client1.partitions);
             assertEquals(expectedPartitions, client2.partitions);
+
+        } finally {
+            zooKeeperServerRunner.stop();
+            zooKeeperServerRunner.clear();
+        }
+    }
+
+    @Test
+    public void testServerRecovery() throws Exception {
+        MockManagedServer server = new MockManagedServer("host1", 9001);
+        StateChangeFuture<ClusterManagerImpl.Cluster> clusterStateChangeFuture;
+        Set<ServerDescriptor> serverDescriptors;
+        ZNode step = new ZNode("/step");
+        IntegerSerializer integerSerializer = new IntegerSerializer();
+
+        ZooKeeperServerRunner zooKeeperServerRunner = new ZooKeeperServerRunner(0);
+        try {
+            String connectString = zooKeeperServerRunner.start();
+            ZooKeeperClient zkClient = new ZooKeeperClientImpl(connectString, 30000);
+
+            zkClient.create(step, 1, integerSerializer, CreateMode.PERSISTENT);
+
+            // Cluster setup
+            final int numPartitions = 10;
+            ZNode clusterZNode = new ZNode("/cluster");
+            ZNode serverDir = new ZNode(clusterZNode, "serverDescriptors");
+            zkClient.create(clusterZNode, CreateMode.PERSISTENT);
+            zkClient.setData(clusterZNode, new ClusterParams("test cluster", numPartitions), new ClusterParamsSerializer());
+            ClusterManagerImpl.createZNodes(zkClient, root);
+
+            // ClusterManager
+            ClusterManagerImpl cluster = new ClusterManagerImpl(zkClient, root, new DynamicPartitionAssignmentPolicy());
+
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            cluster.manage(server);
+            clusterStateChangeFuture.get();
+
+            // Wait until server shows up.
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            while (clusterStateChangeFuture.currentState.serverMembership.size() < 1) {
+                clusterStateChangeFuture.get();
+                clusterStateChangeFuture = cluster.clusterState.watch();
+            }
+
+            // Check the server descriptors
+            assertEquals(1, zkClient.getChildren(serverDir).size());
+            serverDescriptors = cluster.serverDescriptors();
+            assertEquals(1, serverDescriptors.size());
+            for (ServerDescriptor serverDescriptor : serverDescriptors) {
+                assertEquals(server.endpoint(), serverDescriptor.endpoint);
+            }
+
+            // Expire session.
+            ZKTestUtils.expire(zkClient.session());
+
+            // Wait for new session to become active.
+            zkClient.setData(step, 2, integerSerializer);
+
+            // Wait until server shows up.
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            while (clusterStateChangeFuture.currentState.serverMembership.size() < 1) {
+                clusterStateChangeFuture.get();
+                clusterStateChangeFuture = cluster.clusterState.watch();
+            }
+
+            // Check the server descriptor
+            assertEquals(1, zkClient.getChildren(serverDir).size());
+            serverDescriptors = cluster.serverDescriptors();
+            assertEquals(1, serverDescriptors.size());
+            for (ServerDescriptor serverDescriptor : serverDescriptors) {
+                assertEquals(server.endpoint(), serverDescriptor.endpoint);
+            }
+
+            // Force connection loss.
+            zooKeeperServerRunner.stop();
+            zooKeeperServerRunner.start();
+
+            // Wait for the session to reconnect.
+            zkClient.setData(step, 3, integerSerializer);
+
+            // Wait until server shows up again.
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            while (clusterStateChangeFuture.currentState.serverMembership.size() < 1) {
+                clusterStateChangeFuture.get();
+                clusterStateChangeFuture = cluster.clusterState.watch();
+            }
+
+            // Check the server descriptor
+            assertEquals(1, zkClient.getChildren(serverDir).size());
+
+            serverDescriptors = cluster.serverDescriptors();
+            assertEquals(1, serverDescriptors.size());
+            for (ServerDescriptor serverDescriptor : serverDescriptors) {
+                assertEquals(server.endpoint(), serverDescriptor.endpoint);
+            }
 
         } finally {
             zooKeeperServerRunner.stop();
