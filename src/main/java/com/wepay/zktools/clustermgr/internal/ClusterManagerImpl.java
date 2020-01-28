@@ -207,24 +207,37 @@ public class ClusterManagerImpl implements ClusterManager {
     @Override
     public void manage(ManagedServer server) throws ClusterManagerException {
         synchronized (serverManagementLock) {
+            int serverId;
             synchronized (managedServers) {
                 if (running) {
                     if (managedServers.containsKey(server)) {
-                        throw new ClusterManagerException("server already managed");
+                        serverId = managedServers.get(server).serverId;
+                        logger.info("updating the existing server");
+                    } else {
+                        serverId = nextId(serverIdZNode);
                     }
                 } else {
                     throw new ClusterManagerException("already closed");
                 }
             }
 
-            int serverId = nextId(serverIdZNode);
             ServerDescriptor descriptor =
                 new ServerDescriptor(serverId, server.endpoint(), server.getPreferredPartitions());
 
             try {
                 synchronized (managedServers) {
+                    ZNode oldZnode = null;
+                    if (managedServers.get(server) != null) {
+                        oldZnode = managedServers.get(server).znode;
+                    }
+
                     ZNode znode = createServerZNode(descriptor);
                     managedServers.put(server, new ManagedServerInfo(descriptor.serverId, znode));
+
+                    // Removed Znode of old server descriptor
+                    if (oldZnode != null) {
+                        zkClient.delete(oldZnode);
+                    }
                 }
             } catch (Exception ex) {
                 throw new ClusterManagerException("unable to manage server", ex);

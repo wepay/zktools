@@ -1,6 +1,5 @@
 package com.wepay.zktools.clustermgr;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -16,7 +15,5 @@ public interface ManagedServer {
 
     void setPartitions(List<PartitionInfo> partitionInfos);
 
-    default List<Integer> getPreferredPartitions() {
-        return Collections.emptyList();
-    }
+    List<Integer> getPreferredPartitions();
 }
