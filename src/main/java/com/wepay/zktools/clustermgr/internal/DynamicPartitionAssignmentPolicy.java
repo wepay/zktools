@@ -47,14 +47,11 @@ public class DynamicPartitionAssignmentPolicy implements PartitionAssignmentPoli
 
             // reassign partitions of all servers
             for (Integer serverId : oldAssignment.serverIds()) {
-                // store partitionInfo of all the old partitions.
-                Map<Integer, PartitionInfo> serverPartitionInfoMap =
-                    oldAssignment.partitionsFor(serverId)
-                        .stream()
-                        .collect(Collectors.toMap(partitionInfo -> partitionInfo.partitionId, Function.identity()));
-                unassignedPartitionInfoMap.putAll(serverPartitionInfoMap);
-                serverPartitionInfoMap.forEach((partitionId, partitionInfo) -> { partitionToExistingServerMap.put(partitionId,
-                    serverId); });
+                // store partition assignment of all old partitions.
+                oldAssignment.partitionsFor(serverId).forEach(partitionInfo -> {
+                    unassignedPartitionInfoMap.put(partitionInfo.partitionId, partitionInfo);
+                    partitionToExistingServerMap.put(partitionInfo.partitionId, serverId);
+                });
             }
 
             HashMap<Integer, List<PartitionInfo>> newAssignment = new HashMap<>();
