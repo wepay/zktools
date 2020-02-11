@@ -1,6 +1,7 @@
 package com.wepay.zktools.clustermgr;
 
 import com.wepay.zktools.clustermgr.internal.ClusterManagerImpl;
+import com.wepay.zktools.clustermgr.internal.ClusterManagerImpl.Cluster;
 import com.wepay.zktools.clustermgr.internal.ClusterParams;
 import com.wepay.zktools.clustermgr.internal.ClusterParamsSerializer;
 import com.wepay.zktools.clustermgr.internal.DynamicPartitionAssignmentPolicy;
@@ -235,6 +236,123 @@ public class ClusterManagerTest extends ZKTestUtils {
                 assertEquals(new PartitionInfo(1, 1), partitionInfo1);
                 assertEquals(new PartitionInfo(0, 2), partitionInfo2);
             }
+        } finally {
+            zooKeeperServerRunner.stop();
+            zooKeeperServerRunner.clear();
+        }
+    }
+
+    @Test
+    public void testReManageSameServer() throws Exception {
+        int numPartitions = 2;
+        MockManagedServer server1 = new MockManagedServer("host1", 9001);
+        StateChangeFuture<ClusterManagerImpl.Cluster> clusterStateChangeFuture;
+
+        ZooKeeperServerRunner zooKeeperServerRunner = new ZooKeeperServerRunner(0);
+        try {
+            String connectString = zooKeeperServerRunner.start();
+            ZooKeeperClient zkClient = new ZooKeeperClientImpl(connectString, 30000);
+            Cluster clusterState = null;
+
+            // Cluster setup
+            ZNode clusterZNode = new ZNode("/cluster");
+            zkClient.create(clusterZNode, CreateMode.PERSISTENT);
+            zkClient.setData(clusterZNode, new ClusterParams("test cluster", numPartitions), new ClusterParamsSerializer());
+            ClusterManagerImpl.createZNodes(zkClient, root);
+
+            // ClusterManager
+            ClusterManagerImpl cluster = new ClusterManagerImpl(zkClient, root, new DynamicPartitionAssignmentPolicy());
+
+            // Manage server 1
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            cluster.manage(server1);
+            clusterStateChangeFuture.get();
+
+            // Check the server descriptors
+            List<ServerDescriptor> serverDescriptors = new ArrayList<>(cluster.serverDescriptors());
+            assertEquals(1, serverDescriptors.size());
+            ServerDescriptor serverDescriptor = serverDescriptors.get(0);
+            assertEquals(1, serverDescriptor.serverId);
+            assertEquals(server1.endpoint(), serverDescriptor.endpoint);
+            assertEquals(0, serverDescriptor.partitions.size());
+
+            // Check the partition assignments
+            clusterState = cluster.clusterState.get();
+            PartitionAssignment partitionAssignment = cluster.partitionAssignment();
+            assertEquals(1, clusterState.version);
+            assertEquals(1, partitionAssignment.cversion);
+            assertEquals(2, partitionAssignment.numPartitions);
+            assertEquals(1, partitionAssignment.numEndpoints);
+            assertEquals(1, partitionAssignment.serverIds().size());
+            assertEquals(1, partitionAssignment.serverIds().iterator().next().intValue());
+            List<PartitionInfo> partitions = partitionAssignment.partitionsFor(1);
+            partitions.sort(Comparator.comparingInt(p -> p.partitionId));
+            assertEquals(2, partitions.size());
+            assertEquals(new PartitionInfo(0, 1), partitions.get(0));
+            assertEquals(new PartitionInfo(1, 1), partitions.get(1));
+
+            // Re-manage server 1
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            cluster.manage(server1);
+            clusterStateChangeFuture.get();
+
+            // Check the server descriptors
+            serverDescriptors = new ArrayList<>(cluster.serverDescriptors());
+            assertEquals(1, serverDescriptors.size());
+            serverDescriptor = serverDescriptors.get(0);
+            assertEquals(1, serverDescriptor.serverId);
+            assertEquals(server1.endpoint(), serverDescriptor.endpoint);
+            assertEquals(0, serverDescriptor.partitions.size());
+
+            // Check the partition assignments
+            clusterState = cluster.clusterState.get();
+            partitionAssignment = cluster.partitionAssignment();
+            assertEquals(2, clusterState.version);
+            assertEquals(1, partitionAssignment.cversion);
+            assertEquals(2, partitionAssignment.numPartitions);
+            assertEquals(1, partitionAssignment.numEndpoints);
+            assertEquals(1, partitionAssignment.serverIds().size());
+            assertEquals(1, partitionAssignment.serverIds().iterator().next().intValue());
+            partitions = partitionAssignment.partitionsFor(1);
+            partitions.sort(Comparator.comparingInt(p -> p.partitionId));
+            assertEquals(2, partitions.size());
+            assertEquals(new PartitionInfo(0, 1), partitions.get(0));
+            assertEquals(new PartitionInfo(1, 1), partitions.get(1));
+
+            // Add and manage Server 2
+            MockManagedServer server2 = new MockManagedServer("host2", 9002);
+            clusterStateChangeFuture = cluster.clusterState.watch();
+            cluster.manage(server2);
+            clusterStateChangeFuture.get();
+
+            // Check the server descriptors
+            serverDescriptors = new ArrayList<>(cluster.serverDescriptors());
+            serverDescriptors.sort(Comparator.comparing(sd -> sd.serverId));
+            assertEquals(2, serverDescriptors.size());
+            serverDescriptor = serverDescriptors.get(0);
+            assertEquals(1, serverDescriptor.serverId);
+            assertEquals(server1.endpoint(), serverDescriptor.endpoint);
+            assertEquals(0, serverDescriptor.partitions.size());
+            serverDescriptor = serverDescriptors.get(1);
+            assertEquals(2, serverDescriptor.serverId);
+            assertEquals(server2.endpoint(), serverDescriptor.endpoint);
+            assertEquals(0, serverDescriptor.partitions.size());
+
+            // Check the partition assignments
+            clusterState = cluster.clusterState.get();
+            partitionAssignment = cluster.partitionAssignment();
+            assertEquals(3, clusterState.version);
+            assertEquals(2, partitionAssignment.cversion);
+            assertEquals(2, partitionAssignment.numPartitions);
+            assertEquals(2, partitionAssignment.numEndpoints);
+            assertEquals(2, partitionAssignment.serverIds().size());
+            partitions = partitionAssignment.partitionsFor(1);
+            partitions.sort(Comparator.comparingInt(p -> p.partitionId));
+            assertEquals(1, partitions.size());
+            partitions = partitionAssignment.partitionsFor(2);
+            partitions.sort(Comparator.comparingInt(p -> p.partitionId));
+            assertEquals(1, partitions.size());
+
         } finally {
             zooKeeperServerRunner.stop();
             zooKeeperServerRunner.clear();
