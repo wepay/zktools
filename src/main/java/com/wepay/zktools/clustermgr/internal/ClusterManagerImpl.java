@@ -245,11 +245,17 @@ public class ClusterManagerImpl implements ClusterManager {
                             Cluster currentCluster = clusterState.get();
                             int version = currentCluster.version;
                             PartitionAssignment assignment = currentCluster.partitionAssignment;
-                            HashMap<Integer, ServerDescriptor> membership =
-                                new HashMap<>(currentCluster.serverMembership);
 
-                            // Update the new server descriptor of this server.
-                            membership.put(serverId, descriptor);
+                            // Create new membership map
+                            HashMap<Integer, ServerDescriptor> membership = new HashMap<>();
+                            for (ServerDescriptor serverDescriptor : currentCluster.serverMembership.values()) {
+                                if (serverDescriptor.serverId == serverId) {
+                                    // Update the new server descriptor of this server.
+                                    membership.put(serverId, descriptor);
+                                } else {
+                                    membership.put(serverDescriptor.serverId, serverDescriptor);
+                                }
+                            }
 
                             // retry if the partitionAssignment failed to update. (May happen because of
                             // race-condition.)
