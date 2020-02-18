@@ -72,7 +72,7 @@ public class ClusterManagerImpl implements ClusterManager {
             throw new ClusterManagerException("failed to start cluster manager", ex);
         }
 
-        this.clusterState = new State<>(new Cluster(Collections.emptyMap(), new PartitionAssignment()));
+        this.clusterState = new State<>(new Cluster(-1, Collections.emptyMap(), new PartitionAssignment()));
         this.partitionAssignmentPolicy = partitionAssignmentPolicy;
 
         this.zkClient = zkClient;
@@ -207,24 +207,63 @@ public class ClusterManagerImpl implements ClusterManager {
     @Override
     public void manage(ManagedServer server) throws ClusterManagerException {
         synchronized (serverManagementLock) {
+            int serverId;
             synchronized (managedServers) {
                 if (running) {
                     if (managedServers.containsKey(server)) {
-                        throw new ClusterManagerException("server already managed");
+                        serverId = managedServers.get(server).serverId;
+                        logger.info("updating the existing server");
+                    } else {
+                        serverId = nextId(serverIdZNode);
                     }
                 } else {
                     throw new ClusterManagerException("already closed");
                 }
             }
 
-            int serverId = nextId(serverIdZNode);
             ServerDescriptor descriptor =
                 new ServerDescriptor(serverId, server.endpoint(), server.getPreferredPartitions());
 
             try {
-                synchronized (managedServers) {
-                    ZNode znode = createServerZNode(descriptor);
-                    managedServers.put(server, new ManagedServerInfo(descriptor.serverId, znode));
+                synchronized (clusterState) {
+                    synchronized (managedServers) {
+                        ZNode znode = null;
+                        Boolean forceUpdatePartitionAssignment = false;
+                        if (managedServers.get(server) != null) {
+                            znode = managedServers.get(server).znode;
+                        }
+
+                        if (znode != null) {
+                            zkClient.setData(znode, descriptor, serverDescriptorSerializer);
+                            forceUpdatePartitionAssignment = true;
+                        } else {
+                            znode = createServerZNode(descriptor);
+                        }
+                        managedServers.put(server, new ManagedServerInfo(descriptor.serverId, znode));
+
+                        while (forceUpdatePartitionAssignment) {
+                            Cluster currentCluster = clusterState.get();
+                            int version = currentCluster.version;
+                            PartitionAssignment assignment = currentCluster.partitionAssignment;
+
+                            // Create new membership map
+                            HashMap<Integer, ServerDescriptor> membership = new HashMap<>();
+                            for (ServerDescriptor serverDescriptor : currentCluster.serverMembership.values()) {
+                                if (serverDescriptor.serverId == serverId) {
+                                    // Update the new server descriptor of this server.
+                                    membership.put(serverId, descriptor);
+                                } else {
+                                    membership.put(serverDescriptor.serverId, serverDescriptor);
+                                }
+                            }
+
+                            // retry if the partitionAssignment failed to update. (May happen because of
+                            // race-condition.)
+                            if (updatePartitionAssignment(version, assignment.cversion, membership, assignment, true)) {
+                                forceUpdatePartitionAssignment = false;
+                            }
+                        }
+                    }
                 }
             } catch (Exception ex) {
                 throw new ClusterManagerException("unable to manage server", ex);
@@ -301,7 +340,6 @@ public class ClusterManagerImpl implements ClusterManager {
 
     private boolean isCoordinator(Map<Integer, ServerDescriptor> membership) {
         Integer minServerId = Collections.min(membership.keySet());
-
         for (ManagedServerInfo managedServerInfo : managedServers.values()) {
             if (minServerId.equals(managedServerInfo.serverId))
                 return true;
@@ -311,61 +349,70 @@ public class ClusterManagerImpl implements ClusterManager {
     }
 
     private void updateServers(NodeData<PartitionAssignment> nodeData, Map<ZNode, NodeData<ServerDescriptor>> serverNodeData) {
-        final int version = nodeData.stat.getVersion();
-        final int cversion = nodeData.stat.getCversion();
+        synchronized (clusterState) {
+            final int version = nodeData.stat.getVersion();
+            final int cversion = nodeData.stat.getCversion();
 
-        // Get the current assignment in ZK
-        // We should not use the cached assignment to increment the generation numbers correctly
-        PartitionAssignment assignment = nodeData.value;
+            // Get the current assignment in ZK
+            // We should not use the cached assignment to increment the generation numbers correctly
+            PartitionAssignment assignment = nodeData.value;
 
-        // Create new membership map
-        HashMap<Integer, ServerDescriptor> membership = new HashMap<>();
-        for (NodeData<ServerDescriptor> data : serverNodeData.values()) {
-            membership.put(data.value.serverId, data.value);
-        }
-
-        if (assignment != null && assignment.cversion == cversion) {
-            // We got a consistent state (membership and partition assignment)
-            updateCluster(membership, assignment);
-
-        } else if (!membership.isEmpty()) {
-            // Update the partition assignment
-            while (true) {
-                try {
-                    ZooKeeperSession s = zkClient.session();
-
-                    synchronized (managedServers) {
-                        if (managedServers.size() > 0) {
-                            if (isCoordinator(membership)) {
-                                PartitionAssignment newAssignment =
-                                    partitionAssignmentPolicy.update(cversion, assignment, clusterParams.numPartitions, membership);
-
-                                // Save the new assignment in ZK. The version check will detect concurrent update.
-                                s.setData(serverDir, newAssignment, partitionAssignmentSerializer, version);
-                            }
-                        }
-                        return;
-                    }
-                } catch (KeeperException.BadVersionException ex) {
-                    // Ignore The cluster has changed. There is no point updating assignment.
-                    return;
-                } catch (KeeperException.ConnectionLossException | KeeperException.SessionExpiredException ex) {
-                    // Ignore and Retry
-                    logger.warn("failed to update partition assignment, retrying...", ex);
-                } catch (Throwable ex) {
-                    // The assignment will stay stale. This is fatal. Do not retry.
-                    logger.error("failed to update partition assignment", ex);
-                    return;
-                }
+            // Create new membership map
+            HashMap<Integer, ServerDescriptor> membership = new HashMap<>();
+            for (NodeData<ServerDescriptor> data : serverNodeData.values()) {
+                membership.put(data.value.serverId, data.value);
             }
-        } else {
-            // There is no server. The assignment will stay stale. Force clients to remove all servers from their view.
-            removeAllServers();
+
+            if ((clusterState.get().version == version) && (assignment.cversion == cversion)) {
+                // Do nothing. This is because of server re-manage.
+                return;
+            } else if (assignment != null && assignment.cversion == cversion) {
+                // We got a consistent state (membership and partition assignment)
+                updateCluster(version, membership, assignment);
+            } else if (!membership.isEmpty()) {
+                // Update the partition assignment
+                updatePartitionAssignment(version, cversion, membership, assignment, false);
+            } else {
+                // There is no server. The assignment will stay stale. Force clients to remove all servers from their view.
+                removeAllServers(version);
+            }
         }
 
     }
 
-    private void updateCluster(HashMap<Integer, ServerDescriptor> membership, PartitionAssignment assignment) {
+    private Boolean updatePartitionAssignment(int version, int cversion, HashMap<Integer, ServerDescriptor> membership,
+                                           PartitionAssignment assignment, Boolean forceUpdate) {
+        while (true) {
+            try {
+                ZooKeeperSession s = zkClient.session();
+                synchronized (managedServers) {
+                    if (managedServers.size() > 0) {
+                        if (isCoordinator(membership) || forceUpdate) {
+                            PartitionAssignment newAssignment =
+                                partitionAssignmentPolicy.update(cversion, assignment, clusterParams.numPartitions, membership);
+
+                            // Save the new assignment in ZK. The version check will detect concurrent update.
+                            s.setData(serverDir, newAssignment, partitionAssignmentSerializer, version);
+                        }
+                    }
+                    return true;
+                }
+            } catch (KeeperException.BadVersionException ex) {
+                // Ignore The cluster has changed. There is no point updating assignment.
+                return false;
+            } catch (KeeperException.ConnectionLossException | KeeperException.SessionExpiredException ex) {
+                // Ignore and Retry
+                logger.warn("failed to update partition assignment, retrying...", ex);
+            } catch (Throwable ex) {
+                // The assignment will stay stale. This is fatal. Do not retry.
+                logger.error("failed to update partition assignment", ex);
+                return false;
+            }
+        }
+    }
+
+    private void updateCluster(int version, HashMap<Integer, ServerDescriptor> membership,
+                               PartitionAssignment assignment) {
         synchronized (clusterState) {
             // Update the server membership
             Cluster oldCluster = clusterState.get();
@@ -401,12 +448,11 @@ public class ClusterManagerImpl implements ClusterManager {
                     }
                 }
             }
-
-            clusterState.set(new Cluster(membership, assignment));
+            clusterState.set(new Cluster(version, membership, assignment));
         }
     }
 
-    private void removeAllServers() {
+    private void removeAllServers(int version) {
         synchronized (clusterState) {
             // Update the server membership
             Cluster oldCluster = clusterState.get();
@@ -419,8 +465,7 @@ public class ClusterManagerImpl implements ClusterManager {
                     }
                 }
             }
-
-            clusterState.set(new Cluster(Collections.emptyMap(), new PartitionAssignment()));
+            clusterState.set(new Cluster(version, Collections.emptyMap(), new PartitionAssignment()));
         }
     }
 
@@ -494,10 +539,12 @@ public class ClusterManagerImpl implements ClusterManager {
 
     public static class Cluster {
 
+        public final int version;
         public final Map<Integer, ServerDescriptor> serverMembership;
         public final PartitionAssignment partitionAssignment;
 
-        Cluster(Map<Integer, ServerDescriptor> serverMembership, PartitionAssignment partitionAssignment) {
+        Cluster(int version, Map<Integer, ServerDescriptor> serverMembership, PartitionAssignment partitionAssignment) {
+            this.version = version;
             this.serverMembership = Collections.unmodifiableMap(serverMembership);
             this.partitionAssignment = partitionAssignment;
         }

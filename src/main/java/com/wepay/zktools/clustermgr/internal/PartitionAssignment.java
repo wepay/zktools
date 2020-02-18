@@ -65,7 +65,7 @@ public class PartitionAssignment {
 
     @Override
     public int hashCode() {
-        return Objects.hash(cversion, numEndpoints, numEndpoints, assignment);
+        return Objects.hash(cversion, numPartitions, numEndpoints, assignment);
     }
 
     @Override
