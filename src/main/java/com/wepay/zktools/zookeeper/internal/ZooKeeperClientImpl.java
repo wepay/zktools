@@ -61,6 +61,10 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
         this(connectString, sessionTimeout, null);
     }
 
+    /**
+     * Avoid directly use this constructor with a not-null connectTimeout parameter, unless you have to timeout this
+     * and exit retrying when there's no ZooKeeper running.
+     * */
     public ZooKeeperClientImpl(String connectString, int sessionTimeout, Integer connectTimeout) throws ZooKeeperClientException {
         this.connectString = connectString;
         this.sessionTimeout = sessionTimeout;
