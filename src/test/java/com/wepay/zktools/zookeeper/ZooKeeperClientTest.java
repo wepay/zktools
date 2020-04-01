@@ -101,7 +101,7 @@ public class ZooKeeperClientTest extends ZKTestUtils {
         try {
             String connectString = zooKeeperServerRunner.connectString();
 
-            new ZooKeeperClientImpl(connectString, 30000, 5);
+            new ZooKeeperClientImpl(connectString, 30000, 5000);
             fail("client unexpectedly created");
         } catch (ZooKeeperClientException ex) {
             // OK

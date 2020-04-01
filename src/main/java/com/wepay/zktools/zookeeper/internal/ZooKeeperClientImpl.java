@@ -57,13 +57,23 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
 
     private volatile boolean running = true;
 
+    /**
+     * Constructor to create a ZooKeeperClientImpl instance.
+     * @param connectString comma separated host:port pairs, each corresponding to a zk server.
+     * @param sessionTimeout ZooKeeper session timeout in milliseconds.
+     * @throws ZooKeeperClientException exception to be thrown if connection failure.
+     * */
     public ZooKeeperClientImpl(String connectString, int sessionTimeout) throws ZooKeeperClientException {
         this(connectString, sessionTimeout, null);
     }
 
     /**
-     * Avoid directly use this constructor with a not-null connectTimeout parameter, unless you have to timeout this
-     * and exit retrying when there's no ZooKeeper running.
+     * Avoid directly use this constructor with a not-null connectTimeout parameter, unless you purposefully want to
+     * timeout the connection to ZooKeeper servers and exit retrying when there's no ZooKeeper running.
+     * @param connectString comma separated host:port pairs, each corresponding to a zk server.
+     * @param sessionTimeout ZooKeeper session timeout in milliseconds.
+     * @param connectTimeout timeout for connecting to ZooKeeper servers in milliseconds.
+     * @throws ZooKeeperClientException exception to be thrown if connection failure.
      * */
     public ZooKeeperClientImpl(String connectString, int sessionTimeout, Integer connectTimeout) throws ZooKeeperClientException {
         this.connectString = connectString;
@@ -79,7 +89,7 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
             if (connectTimeout == null) {
                 sessionRef = new SessionRef(future.join());
             } else {
-                sessionRef = new SessionRef(future.get(connectTimeout, TimeUnit.SECONDS));
+                sessionRef = new SessionRef(future.get(connectTimeout, TimeUnit.MILLISECONDS));
             }
         } catch (CompletionException | InterruptedException | ExecutionException | TimeoutException ex) {
             connectErrorRef.set(ex.getCause());
