@@ -26,8 +26,11 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -54,7 +57,25 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
 
     private volatile boolean running = true;
 
+    /**
+     * Constructor to create a ZooKeeperClientImpl instance.
+     * @param connectString comma separated host:port pairs, each corresponding to a zk server.
+     * @param sessionTimeout ZooKeeper session timeout in milliseconds.
+     * @throws ZooKeeperClientException exception to be thrown if connection failure.
+     * */
     public ZooKeeperClientImpl(String connectString, int sessionTimeout) throws ZooKeeperClientException {
+        this(connectString, sessionTimeout, null);
+    }
+
+    /**
+     * Constructor that provides the option to timeout the connection to ZooKeeper servers and exit retrying
+     * when ZooKeeper servers are not running.
+     * @param connectString comma separated host:port pairs, each corresponding to a zk server.
+     * @param sessionTimeout ZooKeeper session timeout in milliseconds.
+     * @param connectTimeout timeout for connecting to ZooKeeper servers in milliseconds.
+     * @throws ZooKeeperClientException exception to be thrown if connection failure.
+     * */
+    public ZooKeeperClientImpl(String connectString, int sessionTimeout, Integer connectTimeout) throws ZooKeeperClientException {
         this.connectString = connectString;
         this.sessionTimeout = sessionTimeout;
         this.onConnectedWatcherManager = new ConnectionWatcherManager<>();
@@ -65,8 +86,12 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
         // Create a session
         try {
             CompletableFuture<ZooKeeperSessionImpl> future = ZooKeeperSessionImpl.createAsync(this);
-            sessionRef = new SessionRef(future.join());
-        } catch (CompletionException ex) {
+            if (connectTimeout == null) {
+                sessionRef = new SessionRef(future.join());
+            } else {
+                sessionRef = new SessionRef(future.get(connectTimeout, TimeUnit.MILLISECONDS));
+            }
+        } catch (CompletionException | InterruptedException | ExecutionException | TimeoutException ex) {
             connectErrorRef.set(ex.getCause());
             throw new ZooKeeperClientException("connection failure", ex.getCause());
         }

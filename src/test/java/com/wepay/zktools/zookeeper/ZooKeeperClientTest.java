@@ -96,6 +96,22 @@ public class ZooKeeperClientTest extends ZKTestUtils {
     }
 
     @Test
+    public void testConnectTimeoutWhenZooKeeperNotRunning() throws Exception {
+        ZooKeeperServerRunner zooKeeperServerRunner = new ZooKeeperServerRunner(0);
+        try {
+            String connectString = zooKeeperServerRunner.connectString();
+
+            new ZooKeeperClientImpl(connectString, 30000, 5000);
+            fail("client unexpectedly created");
+        } catch (ZooKeeperClientException ex) {
+            // OK
+        } finally {
+            zooKeeperServerRunner.stop();
+            zooKeeperServerRunner.clear();
+        }
+    }
+
+    @Test
     public void testSessionExpiration() throws Exception {
         ZooKeeperServerRunner zooKeeperServerRunner = new ZooKeeperServerRunner(0);
         try {
