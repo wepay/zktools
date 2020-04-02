@@ -68,8 +68,8 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
     }
 
     /**
-     * Avoid directly use this constructor with a not-null connectTimeout parameter, unless you purposefully want to
-     * timeout the connection to ZooKeeper servers and exit retrying when there's no ZooKeeper running.
+     * Constructor that provides the option to timeout the connection to ZooKeeper servers and exit retrying
+     * when ZooKeeper servers are not running.
      * @param connectString comma separated host:port pairs, each corresponding to a zk server.
      * @param sessionTimeout ZooKeeper session timeout in milliseconds.
      * @param connectTimeout timeout for connecting to ZooKeeper servers in milliseconds.
