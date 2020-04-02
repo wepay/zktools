@@ -93,6 +93,7 @@ public class ZooKeeperClientImpl implements ZooKeeperClient {
             }
         } catch (CompletionException | InterruptedException | ExecutionException | TimeoutException ex) {
             connectErrorRef.set(ex.getCause());
+            executor.shutdown();
             throw new ZooKeeperClientException("connection failure", ex.getCause());
         }
     }
