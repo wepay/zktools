@@ -57,7 +57,10 @@ public class DynamicPartitionAssignmentPolicy implements PartitionAssignmentPoli
             int minNumPartitionsPerServer = numPartitionsToAssign / numServers;
             int remainingPartitions = numPartitionsToAssign % numServers;
 
-            // Inherit the currently assigned preferred partitions as many as possible
+            // Satisfy all preferred partition assignment, even if one or more servers ask for more than
+            // (numPartitions / numServers + 1) number of preferred partitions.
+            // But note that the assignment runs sequentially from server 1 to server N, if multiple servers claim the
+            // same partition, it will get assigned only to the first server.
             for (Map.Entry<Integer, ServerDescriptor> serverEntry : serverDescriptors.entrySet()) {
                 List<PartitionInfo> partitions = new ArrayList<>(minNumPartitionsPerServer + (remainingPartitions > 0 ? 1 : 0));
                 newAssignment.put(serverEntry.getKey(), partitions);
@@ -77,7 +80,7 @@ public class DynamicPartitionAssignmentPolicy implements PartitionAssignmentPoli
                             }
                             numPartitionsToAssign--;
                             unassignedPartitionInfoMap.remove(partitionId);
-                        } else if (partitions.size() == minNumPartitionsPerServer && remainingPartitions > 0) {
+                        } else {
                             if (serverEntry.getKey().equals(oldServerId)) {
                                 partitions.add(oldInfo);
                             } else {
