@@ -72,22 +72,16 @@ public class DynamicPartitionAssignmentPolicy implements PartitionAssignmentPoli
                     PartitionInfo oldInfo = unassignedPartitionInfoMap.get(partitionId);
                     if (oldInfo != null) {
                         Integer oldServerId = partitionToExistingServerMap.get(partitionId);
-                        if (partitions.size() < minNumPartitionsPerServer) {
-                            if (serverEntry.getKey().equals(oldServerId)) {
-                                partitions.add(oldInfo);
-                            } else {
-                                partitions.add(new PartitionInfo(partitionId, oldInfo.generation + 1));
-                            }
-                            numPartitionsToAssign--;
-                            unassignedPartitionInfoMap.remove(partitionId);
+
+                        if (serverEntry.getKey().equals(oldServerId)) {
+                            partitions.add(oldInfo);
                         } else {
-                            if (serverEntry.getKey().equals(oldServerId)) {
-                                partitions.add(oldInfo);
-                            } else {
-                                partitions.add(new PartitionInfo(partitionId, oldInfo.generation + 1));
-                            }
-                            numPartitionsToAssign--;
-                            unassignedPartitionInfoMap.remove(partitionId);
+                            partitions.add(new PartitionInfo(partitionId, oldInfo.generation + 1));
+                        }
+                        numPartitionsToAssign--;
+                        unassignedPartitionInfoMap.remove(partitionId);
+
+                        if (partitions.size() >= minNumPartitionsPerServer) {
                             remainingPartitions--;
                         }
                     }
