@@ -171,7 +171,7 @@ public class DynamicPartitionAssignmentPolicyTest {
         // Assign more than half of the partitions to server 2, all preferred partition assignment should be satisfied.
         servers.put(1, new ServerDescriptor(1, new Endpoint("host0", 6000), Collections.emptyList()));
         servers.put(2, new ServerDescriptor(2, new Endpoint("host1", 6000), Arrays.asList(0, 1, 3)));
-        assignment = policy.update(6, assignment, 4, servers);
+        assignment = policy.update(1, assignment, 4, servers);
 
         /** Verify partition assignment of the servers.
          *  Server 1: Partitions Assigned ====> P2;  Preferred Partitions ====> {}
@@ -193,7 +193,7 @@ public class DynamicPartitionAssignmentPolicyTest {
          *  Server 1: Partitions Assigned ====> P0, P1, P2;  Preferred Partitions ====> P0, P1, P2
          *  Server 2: Partitions Assigned ====> P3;  Preferred Partitions ====> P0, P1, P3
          * */
-        assignment = policy.update(6, assignment, 4, servers);
+        assignment = policy.update(2, assignment, 4, servers);
         assertEquals(2, assignment.numEndpoints);
         assertEquals(3, assignment.partitionsFor(1).size());
         assertTrue(assignment.partitionsFor(1).contains(new PartitionInfo(0, 2)));
