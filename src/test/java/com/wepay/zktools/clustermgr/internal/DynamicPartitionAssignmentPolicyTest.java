@@ -42,7 +42,7 @@ public class DynamicPartitionAssignmentPolicyTest {
         assertEquals(2, assignment.partitionsFor(2).size());
 
         servers.remove(0);
-        assignment = policy.update(1, assignment, 4, servers);
+        assignment = policy.update(2, assignment, 4, servers);
 
         assertEquals(2, assignment.numEndpoints);
         assertEquals(Utils.set(1, 2), assignment.serverIds());
@@ -50,14 +50,14 @@ public class DynamicPartitionAssignmentPolicyTest {
         assertEquals(2, assignment.partitionsFor(2).size());
 
         servers.remove(1);
-        assignment = policy.update(2, assignment, 4, servers);
+        assignment = policy.update(3, assignment, 4, servers);
 
         assertEquals(1, assignment.numEndpoints);
         assertEquals(Utils.set(2), assignment.serverIds());
         assertEquals(4, assignment.partitionsFor(2).size());
 
         servers.remove(2);
-        assignment = policy.update(2, assignment, 4, servers);
+        assignment = policy.update(-1, assignment, 4, servers);
 
         assertEquals(0, assignment.numEndpoints);
         assertTrue(assignment.serverIds().isEmpty());
@@ -90,7 +90,7 @@ public class DynamicPartitionAssignmentPolicyTest {
 
         // Make P2, P3 as preferred partition to server 1
         servers.put(1, new ServerDescriptor(1, new Endpoint("host0", 6000), Arrays.asList(2, 3)));
-        assignment = policy.update(2, assignment, 4, servers);
+        assignment = policy.update(1, assignment, 4, servers);
         /** Verify partition assignment of the servers. [Note: no change in assignment]
          *  Server 1: Partitions Assigned ====> P0, P1, P2, P3;  Preferred Partitions ====> P2, P3
          */
@@ -103,7 +103,7 @@ public class DynamicPartitionAssignmentPolicyTest {
 
         // Add server 2
         servers.put(2, new ServerDescriptor(2, new Endpoint("host1", 6000), Collections.emptyList()));
-        assignment = policy.update(3, assignment, 4, servers);
+        assignment = policy.update(2, assignment, 4, servers);
         /** Verify partition assignment of the servers. [Note: Change in assignment]
          *  Server 1: Partitions Assigned ====> P2, P3;  Preferred Partitions ====> P2, P3
          *  Server 2: Partitions Assigned ====> P0, P1;  Preferred Partitions ====> -
@@ -118,7 +118,7 @@ public class DynamicPartitionAssignmentPolicyTest {
 
         // Make P2 as preferred partition to Server 2
         servers.put(2, new ServerDescriptor(2, new Endpoint("host1", 6000), Collections.singletonList(2)));
-        assignment = policy.update(4, assignment, 4, servers);
+        assignment = policy.update(2, assignment, 4, servers);
         /** Verify partition assignment of the servers. [Note: No change in assignment]
          *  Server 1: Partitions Assigned ====> P2, P3;  Preferred Partitions ====> P2, P3
          *  Server 2: Partitions Assigned ====> P0, P1;  Preferred Partitions ====> P2
@@ -140,7 +140,7 @@ public class DynamicPartitionAssignmentPolicyTest {
          */
         // Un-assign P2 from server 1
         servers.put(1, new ServerDescriptor(1, new Endpoint("host0", 6000), Arrays.asList(3)));
-        assignment = policy.update(5, assignment, 4, servers);
+        assignment = policy.update(2, assignment, 4, servers);
         /** Verify partition assignment of the servers.
          *  Server 1: Partitions Assigned ====> (P0 or P1), P3;  Preferred Partitions ====> P3
          *  Server 2: Partitions Assigned ====> (P0 or P1), P2;  Preferred Partitions ====> P2
@@ -193,7 +193,7 @@ public class DynamicPartitionAssignmentPolicyTest {
          *  Server 1: Partitions Assigned ====> P0, P1, P2;  Preferred Partitions ====> P0, P1, P2
          *  Server 2: Partitions Assigned ====> P3;  Preferred Partitions ====> P0, P1, P3
          * */
-        assignment = policy.update(2, assignment, 4, servers);
+        assignment = policy.update(1, assignment, 4, servers);
         assertEquals(2, assignment.numEndpoints);
         assertEquals(3, assignment.partitionsFor(1).size());
         assertTrue(assignment.partitionsFor(1).contains(new PartitionInfo(0, 2)));
