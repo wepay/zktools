@@ -57,42 +57,44 @@ public class ListCluster {
 
         ZooKeeperClient zkClient = new ZooKeeperClientImpl(zkConnectString, 30000);
 
-        list(new ZNode(clusterRootPath), zkClient);
+        System.out.print(list(new ZNode(clusterRootPath), zkClient));
     }
 
-    public static void list(ZNode root, ZooKeeperClient zkClient) throws Exception {
+    public static String list(ZNode root, ZooKeeperClient zkClient) throws Exception {
+        StringBuilder sb = new StringBuilder();
         ClusterManager clusterManager = new ClusterManagerImpl(zkClient, root, new DynamicPartitionAssignmentPolicy());
         Set<ServerDescriptor> serverDescriptors = clusterManager.serverDescriptors();
         PartitionAssignment partitionAssignment = clusterManager.partitionAssignment();
         String clusterName = clusterManager.clusterName();
         int numPartitions = clusterManager.numPartitions();
 
-        System.out.println("cluster root [" + root + "]:");
+        sb.append(String.format("cluster root [%s]:%n", root));
 
-        System.out.println("  name=" + clusterName);
-        System.out.println("  numPartitions=" + numPartitions);
+        sb.append(String.format("  name=%s%n", clusterName));
+        sb.append(String.format("  numPartitions=%s%n", numPartitions));
 
-        System.out.println(String.format("cluster root [%s] has server descriptors:", root));
+        sb.append(String.format("cluster root [%s] has server descriptors:%n", root));
 
         for (ServerDescriptor sd : serverDescriptors) {
             StringJoiner partitionJoiner = new StringJoiner(",");
             sd.partitions.forEach(p -> partitionJoiner.add(p.toString()));
             String partitionString = (sd.partitions.size() == 0) ? "*" : partitionJoiner.toString();
-            System.out.println(String.format("  server=%d, endpoint=%s, preferred partitions=[%s]", sd.serverId, sd.endpoint, partitionString));
+            sb.append(String.format("  server=%d, endpoint=%s, preferred partitions=[%s]%n", sd.serverId, sd.endpoint, partitionString));
         }
 
-        System.out.println(String.format("cluster root [%s] has partition assignment metadata:", root));
-        System.out.println(String.format("  cversion=%d, endpoints=%d, partitions=%d",
-                partitionAssignment.cversion, partitionAssignment.numEndpoints, partitionAssignment.numPartitions));
+        sb.append(String.format("cluster root [%s] has partition assignment metadata:%n", root));
+        sb.append(String.format("  cversion=%d, endpoints=%d, partitions=%d%n",
+            partitionAssignment.cversion, partitionAssignment.numEndpoints, partitionAssignment.numPartitions));
 
-        System.out.println(String.format("cluster root [%s] has partition assignments:", root));
+        sb.append(String.format("cluster root [%s] has partition assignments:%n", root));
         for (int serverId : partitionAssignment.serverIds()) {
             List<PartitionInfo> partitionInfoList = partitionAssignment.partitionsFor(serverId);
             for (PartitionInfo partitionInfo : partitionInfoList) {
-                System.out.println(String.format("  server=%d, partition=%d, generation=%d",
-                        serverId, partitionInfo.partitionId, partitionInfo.generation));
+                sb.append(String.format("  server=%d, partition=%d, generation=%d%n",
+                    serverId, partitionInfo.partitionId, partitionInfo.generation));
             }
         }
+        return sb.toString();
     }
 
     private static void usage() {
