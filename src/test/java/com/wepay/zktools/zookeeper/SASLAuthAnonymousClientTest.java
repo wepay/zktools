@@ -5,8 +5,6 @@ import com.wepay.zktools.zookeeper.internal.ZooKeeperClientImpl;
 import com.wepay.zktools.zookeeper.serializer.ByteArraySerializer;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.ZooDefs;
-import org.apache.zookeeper.data.ACL;
-import org.apache.zookeeper.data.Id;
 import org.junit.Test;
 
 import java.io.File;
