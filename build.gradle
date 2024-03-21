@@ -40,8 +40,6 @@ dependencies {
             "com.google.code.findbugs:annotations:$googleFindbugsVersion",
             "org.apache.zookeeper:zookeeper:$apacheZooKeeperVersion",
             "org.slf4j:slf4j-api:$slf4jVersion",
-            "io.dropwizard.metrics:metrics-core:4.1.12.1",
-            "org.xerial.snappy:snappy-java:1.1.10.5",
     )
 
     testCompile (
